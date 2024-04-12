@@ -45,7 +45,7 @@ def validate_token(http, token):
     try:
         req_account = http.request(
             'GET',
-            '%s/v1/s/accountinfo' % API_URL,
+            '%s/s/accountinfo' % API_URL,
             headers={
                 'Authorization': 'Bearer ' + token,
             }
@@ -53,7 +53,12 @@ def validate_token(http, token):
         resp_account = json.loads(req_account.data.decode('utf-8'))
         with open('resp_account.json', "w") as f:
             f.write(json.dumps(resp_account, indent=2))
-        return "uid" in resp_account
+
+        if "uid" in resp_account:
+            return True
+        else:
+            print("Unexpected validation response")
+            return False
     except Exception as e:
         print("Failed to validate token")
         print(e)
@@ -101,7 +106,8 @@ def fetch_qc_data(login, password):
     idtoparams = list(
         map(lambda p: {
             'datafetch': {"fetchType": p["datafetch"]["fetchType"],
-                          "deviceId": p["datafetch"]["parameters"]['deviceId']} | p["datafetch"]['parameters'],
+                          "deviceId": p["datafetch"]["parameters"]['deviceId']} | (
+                             p["datafetch"]['parameters']),
             'echartOpts': p['echartOpts']},
             devparams))
     titles = [w["title"] for w in devparams]
