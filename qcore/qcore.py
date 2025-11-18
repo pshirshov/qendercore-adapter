@@ -173,7 +173,7 @@ def fetch_qc_data(login, password):
             # Status data (grid export, battery discharge, SoC)
             links = series["links"]
             for link in links:
-                key = _normalize_key(link["id"])
+                key = _normalize_key(link["id"]) + '_wh'
                 result['status'][key] = link["value"]
         elif "dataset" in resp_chart:
             # Time series power data
@@ -196,7 +196,12 @@ def fetch_qc_data(login, password):
 
 def _normalize_key(name):
     """Convert display name to snake_case key"""
-    return name.lower().replace(' ', '_').replace('(', '').replace(')', '').replace('.', '')
+    import re
+    result = name.lower().replace(' ', '_')
+    result = re.sub(r'[().-]', '_', result)
+    result = re.sub(r'_+', '_', result)
+    result = result.strip('_')
+    return result
 
 
 def get_http_client():
