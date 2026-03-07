@@ -247,6 +247,32 @@ def get_device_id(http, token):
     return device_id
 
 
+def get_enchwt(http, token, device_id):
+    """Fetch the enchwt (encrypted hardware token) required by the schedule API"""
+    req = http.request(
+        'POST',
+        '%s/h/ds' % API_URL,
+        headers={
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json',
+        },
+        body=json.dumps({
+            '_ft': 'hwv',
+            'hwid': device_id,
+            'f': ['hwid', 'enchwt'],
+        })
+    )
+    resp = json.loads(req.data.decode('utf-8'))
+    assert "rows" in resp, "Data source response missing 'rows': %s" % json.dumps(resp)
+    assert len(resp["rows"]) > 0, "Data source returned no rows"
+
+    cols = [c["id"] for c in resp["cols"]]
+    enchwt_idx = cols.index("enchwt")
+    enchwt = resp["rows"][0][enchwt_idx]
+    assert enchwt, "enchwt not found in data source response"
+    return enchwt
+
+
 def fetch_daily_schedule(login, password, device_id=None):
     """
     Fetch the current daily schedule configuration from the inverter.
@@ -265,9 +291,11 @@ def fetch_daily_schedule(login, password, device_id=None):
     if device_id is None:
         device_id = get_device_id(http, token)
 
+    enchwt = get_enchwt(http, token, device_id)
+
     req_schedule = http.request(
         'GET',
-        '%s/h/devices/%s/widgets/dailysched' % (API_URL, device_id),
+        '%s/h/devices/%s/widgets/dailysched?enchwt=%s' % (API_URL, device_id, enchwt),
         headers={
             'Authorization': 'Bearer ' + token,
         }
