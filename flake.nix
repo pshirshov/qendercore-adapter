@@ -12,6 +12,8 @@
         pkgs = nixpkgs.legacyPackages.${system};
         python = pkgs.python3.withPackages (ps: with ps; [
           urllib3
+          paho-mqtt
+          ha-mqtt-discoverable
         ]);
       in
       {
