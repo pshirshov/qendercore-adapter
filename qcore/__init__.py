@@ -5,6 +5,7 @@ from .qcore import (
     Schedule,
     ScheduleMode,
     DailyScheduleConfig,
+    SCHEDULE_MODE_NAMES,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     'Schedule',
     'ScheduleMode',
     'DailyScheduleConfig',
+    'SCHEDULE_MODE_NAMES',
 ]
