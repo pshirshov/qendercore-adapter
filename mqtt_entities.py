@@ -31,14 +31,14 @@ MODE_OPTIONS = [
 STATUS_KEY_MAP = {
     "grid_export_wh": ("qc_grid_export", "Grid Export", "power", "W"),
     "battery_discharge_wh": ("qc_battery_discharge", "Battery Discharge", "power", "W"),
-    "battery_soc_wh": ("qc_battery_soc", "Battery SoC", "battery", "%"),
 }
 
 # fetch_qc_data() energy dict keys -> (unique_id, display_name, device_class, unit)
 ENERGY_KEY_MAP = {
-    "import": ("qc_import_energy", "Import Energy", "energy", "kWh"),
-    "export": ("qc_export_energy", "Export Energy", "energy", "kWh"),
-    "self_consumption": ("qc_self_consumption", "Self Consumption", "energy", "kWh"),
+    "current_battery_soc": ("qc_battery_soc", "Battery SoC", "battery", "%"),
+    "import_energy_kwh": ("qc_import_energy", "Import Energy", "energy", "kWh"),
+    "export_energy_kwh": ("qc_export_energy", "Export Energy", "energy", "kWh"),
+    "self_consumption_energy_kwh": ("qc_self_consumption", "Self Consumption", "energy", "kWh"),
 }
 
 
