@@ -1,11 +1,11 @@
-//! End-to-end smoke test that mirrors `python run.py status`.
+//! End-to-end smoke test that exercises the live Qendercore API.
 //!
-//! Reads `../auth.json` (relative to the workspace root) for credentials and
-//! exercises the live Qendercore API. Useful both as a quick liveness check
+//! Reads credentials from a JSON file (default: `/var/run/agenix/qendercore`)
+//! and exercises the live Qendercore API. Useful both as a quick liveness check
 //! after API changes and as a minimal usage example for the qcore client.
 //!
 //! Run with:
-//!     cargo run --example smoke
+//!     cargo run --example smoke [/path/to/credentials.json]
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -13,6 +13,8 @@ use std::time::Duration;
 use qendercore_mqtt_adapter::config::QcoreConfig;
 use qendercore_mqtt_adapter::qcore::QcoreClient;
 use serde::Deserialize;
+
+const DEFAULT_CREDENTIALS_FILE: &str = "/var/run/agenix/qendercore";
 
 #[derive(Debug, Deserialize)]
 struct Auth {
@@ -23,7 +25,7 @@ struct Auth {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let auth_path = std::env::args()
         .nth(1)
-        .unwrap_or_else(|| "../auth.json".to_string());
+        .unwrap_or_else(|| DEFAULT_CREDENTIALS_FILE.to_string());
     let raw = std::fs::read_to_string(&auth_path)?;
     let auth: Auth = serde_json::from_str(&raw)?;
 

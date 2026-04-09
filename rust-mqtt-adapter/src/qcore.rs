@@ -386,16 +386,7 @@ fn collect_widgets(dashboard: &Value) -> AppResult<Vec<DashboardWidget>> {
     Ok(widgets)
 }
 
-/// Mirrors the Python expression that builds the body for /h/chart, namely:
-///
-/// ```python
-/// {
-///     'datafetch': {"fetchType": p["datafetch"]["fetchType"],
-///                   "deviceId": p["datafetch"]["parameters"]['deviceId']} | (
-///                       p["datafetch"]['parameters']),
-///     'echartOpts': p['echartOpts']
-/// }
-/// ```
+/// Builds the body for `/h/chart`.
 fn build_chart_request(widget: &DashboardWidget) -> AppResult<Value> {
     let parameters = widget
         .datafetch

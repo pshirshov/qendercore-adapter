@@ -10,11 +10,6 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        python = pkgs.python3.withPackages (ps: with ps; [
-          urllib3
-          paho-mqtt
-          ha-mqtt-discoverable
-        ]);
         rustAdapter = pkgs.rustPlatform.buildRustPackage {
           pname = "qendercore-mqtt-adapter";
           version = "0.1.0";
@@ -31,7 +26,6 @@
         };
         devShells.default = pkgs.mkShell {
           buildInputs = [
-            python
             pkgs.nodejs_22
             pkgs.cargo
             pkgs.rustc

@@ -3,9 +3,11 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use clap::Parser;
+use serde::Deserialize;
 
 use crate::error::{AppError, AppResult};
 
+const DEFAULT_QC_CREDENTIALS_FILE: &str = "/var/run/agenix/qendercore";
 const DEFAULT_MQTT_PORT: u16 = 1883;
 const DEFAULT_INTERVAL_SECONDS: u64 = 60;
 const DEFAULT_HTTP_TIMEOUT_MILLIS: u64 = 15_000;
@@ -21,11 +23,13 @@ const DEFAULT_API_URL: &str = "https://auth.qendercore.com:8000/v1";
 #[derive(Debug, Parser)]
 #[command(about = "Standalone Rust MQTT adapter for the Qendercore inverter cloud")]
 pub struct CliArgs {
-    #[arg(long, help = "Qendercore account login (email)")]
-    pub qc_login: String,
-    #[arg(long, help = "Qendercore account password")]
+    #[arg(long, default_value = DEFAULT_QC_CREDENTIALS_FILE, help = "JSON credentials file with login and password fields")]
+    pub qc_credentials_file: PathBuf,
+    #[arg(long, help = "Qendercore account login (email), overrides credentials file")]
+    pub qc_login: Option<String>,
+    #[arg(long, help = "Qendercore account password, overrides credentials file")]
     pub qc_password: Option<String>,
-    #[arg(long, help = "Qendercore password file")]
+    #[arg(long, help = "Qendercore password file, overrides credentials file")]
     pub qc_password_file: Option<PathBuf>,
     #[arg(long, default_value = DEFAULT_API_URL, help = "Qendercore API base URL")]
     pub qc_api_url: String,
@@ -106,13 +110,14 @@ pub struct StatsConfig {
     pub interval: Duration,
 }
 
+#[derive(Debug, Deserialize)]
+struct QcCredentials {
+    login: String,
+    password: String,
+}
+
 impl CliArgs {
     pub fn into_config(self) -> AppResult<AppConfig> {
-        if self.qc_login.trim().is_empty() {
-            return Err(AppError::InvalidConfig(
-                "qc_login cannot be empty".to_string(),
-            ));
-        }
         if self.qc_api_url.trim().is_empty() {
             return Err(AppError::InvalidConfig(
                 "qc_api_url cannot be empty".to_string(),
@@ -155,12 +160,24 @@ impl CliArgs {
             ));
         }
 
-        let qc_password = load_secret("qc_password", self.qc_password, self.qc_password_file)?
-            .ok_or_else(|| {
-                AppError::InvalidConfig(
-                    "either --qc-password or --qc-password-file must be provided".to_string(),
-                )
-            })?;
+        let qc_password_override = load_secret("qc_password", self.qc_password, self.qc_password_file)?;
+        let needs_credentials_file = self.qc_login.is_none() || qc_password_override.is_none();
+        let credentials = if needs_credentials_file {
+            Some(load_credentials(&self.qc_credentials_file)?)
+        } else {
+            None
+        };
+        let qc_login = self.qc_login
+            .or_else(|| credentials.as_ref().map(|c| c.login.clone()))
+            .ok_or_else(|| AppError::InvalidConfig("qc_login is required".to_string()))?;
+        if qc_login.trim().is_empty() {
+            return Err(AppError::InvalidConfig(
+                "qc_login cannot be empty".to_string(),
+            ));
+        }
+        let qc_password = qc_password_override
+            .or_else(|| credentials.map(|c| c.password))
+            .ok_or_else(|| AppError::InvalidConfig("qc_password is required".to_string()))?;
 
         let mqtt_password = load_secret("mqtt_password", self.mqtt_password, self.mqtt_password_file)?;
         if mqtt_password.is_some() && self.mqtt_user.is_none() {
@@ -172,7 +189,7 @@ impl CliArgs {
         Ok(AppConfig {
             qcore: QcoreConfig {
                 api_url: self.qc_api_url.trim().trim_end_matches('/').to_string(),
-                login: self.qc_login.trim().to_string(),
+                login: qc_login.trim().to_string(),
                 password: qc_password,
                 cache_dir: self.cache_dir,
                 http_timeout: Duration::from_millis(self.http_timeout_millis),
@@ -236,13 +253,30 @@ fn load_secret(
     }
 }
 
+fn load_credentials(path: &PathBuf) -> AppResult<QcCredentials> {
+    let content = fs::read_to_string(path).map_err(|e| {
+        AppError::InvalidConfig(format!(
+            "failed to read credentials file {}: {e}",
+            path.display()
+        ))
+    })?;
+    let creds: QcCredentials = serde_json::from_str(&content).map_err(|e| {
+        AppError::InvalidConfig(format!(
+            "failed to parse credentials file {}: {e}",
+            path.display()
+        ))
+    })?;
+    Ok(creds)
+}
+
 #[cfg(test)]
 mod tests {
     use super::CliArgs;
 
     fn base_args() -> CliArgs {
         CliArgs {
-            qc_login: "user@example.com".to_string(),
+            qc_credentials_file: super::DEFAULT_QC_CREDENTIALS_FILE.into(),
+            qc_login: Some("user@example.com".to_string()),
             qc_password: Some("secret".to_string()),
             qc_password_file: None,
             qc_api_url: super::DEFAULT_API_URL.to_string(),
@@ -276,11 +310,14 @@ mod tests {
     }
 
     #[test]
-    fn into_config_rejects_missing_qc_password() {
+    #[ignore = "requires /var/run/agenix/qendercore"]
+    fn into_config_loads_credentials_from_file() {
         let mut args = base_args();
+        args.qc_login = None;
         args.qc_password = None;
-        let error = args.into_config().unwrap_err();
-        assert!(error.to_string().contains("qc-password"));
+        let config = args.into_config().unwrap();
+        assert!(!config.qcore.login.is_empty());
+        assert!(!config.qcore.password.is_empty());
     }
 
     #[test]

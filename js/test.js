@@ -2,7 +2,8 @@ import fs from 'fs';
 import { fetchInverterData, fetchDailySchedule, setDailySchedule, ScheduleMode, Schedule } from './index.js';
 
 async function main() {
-    const authData = JSON.parse(fs.readFileSync('../auth.json', 'utf-8'));
+    const credentialsFile = process.argv[2] || '/var/run/agenix/qendercore';
+    const authData = JSON.parse(fs.readFileSync(credentialsFile, 'utf-8'));
     const login = authData.login;
     const password = authData.password;
 
