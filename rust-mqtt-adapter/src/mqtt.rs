@@ -95,7 +95,7 @@ struct EnergySensorDef {
     unit: &'static str,
 }
 
-/// Decoded MQTT command message addressed to the adapter.
+/// Decoded MQTT message addressed to the adapter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CommandMessage {
     ScheduleEnabled(bool),
@@ -104,6 +104,8 @@ pub enum CommandMessage {
     ScheduleMode { slot: usize, mode: ScheduleMode },
     ScheduleStart { slot: usize, value: String },
     ScheduleEnd { slot: usize, value: String },
+    /// Home Assistant announced itself online; republish discovery and state.
+    HomeAssistantOnline,
 }
 
 pub struct MqttPublisher {
@@ -145,22 +147,32 @@ impl MqttPublisher {
         let healthy_for_thread = Arc::clone(&healthy);
         let last_error_for_thread = Arc::clone(&last_error);
         let topic_prefix = config.topic_prefix.clone();
+        let ha_status_topic = format!("{}/status", config.discovery_prefix);
         thread::spawn(move || {
             let mut failure_message = "mqtt event loop stopped unexpectedly".to_string();
             for notification in connection.iter() {
                 match notification {
                     Ok(Event::Incoming(Packet::Publish(publish))) => {
-                        match decode_command(&topic_prefix, &publish) {
-                            Ok(Some(command)) => {
-                                if command_tx.send(command).is_err() {
-                                    failure_message =
-                                        "command receiver dropped".to_string();
-                                    break;
+                        let message = if publish.topic == ha_status_topic
+                            && publish.payload.as_ref() == b"online"
+                        {
+                            Some(CommandMessage::HomeAssistantOnline)
+                        } else {
+                            match decode_command(&topic_prefix, &publish) {
+                                Ok(cmd) => cmd,
+                                Err(error) => {
+                                    warn!(
+                                        "ignoring malformed command on {}: {}",
+                                        publish.topic, error
+                                    );
+                                    None
                                 }
                             }
-                            Ok(None) => {}
-                            Err(error) => {
-                                warn!("ignoring malformed command on {}: {}", publish.topic, error);
+                        };
+                        if let Some(command) = message {
+                            if command_tx.send(command).is_err() {
+                                failure_message = "command receiver dropped".to_string();
+                                break;
                             }
                         }
                     }
@@ -397,6 +409,11 @@ impl MqttPublisher {
     }
 
     fn subscribe_command_topics(&self) -> AppResult<()> {
+        // HA birth topic: republish discovery when Home Assistant restarts
+        self.client.subscribe(
+            format!("{}/status", self.discovery_prefix),
+            QoS::AtLeastOnce,
+        )?;
         self.client
             .subscribe(self.command_topic(SCHEDULE_ENABLED_KEY), QoS::AtLeastOnce)?;
         self.client

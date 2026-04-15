@@ -121,6 +121,11 @@ fn wait_or_handle_commands(
         }
         let remaining = deadline - now;
         match command_rx.recv_timeout(remaining) {
+            Ok(CommandMessage::HomeAssistantOnline) => {
+                if let Err(error) = handle_ha_online(qcore, publisher, stats) {
+                    warn!("failed to handle HA online event: {error}");
+                }
+            }
             Ok(command) => {
                 stats.record_command_received();
                 if let Err(error) = handle_command(command, qcore, publisher, stats) {
@@ -135,6 +140,30 @@ fn wait_or_handle_commands(
             }
         }
     }
+}
+
+fn handle_ha_online(
+    qcore: &Arc<QcoreClient>,
+    publisher: &MqttPublisher,
+    stats: &Arc<RuntimeStats>,
+) -> AppResult<()> {
+    info!("home assistant came online, republishing discovery and state");
+    publisher.publish_discovery()?;
+    match qcore.fetch_qc_data() {
+        Ok(data) => {
+            publisher.publish_qc_data(&data)?;
+            stats.record_successful_poll();
+        }
+        Err(error) => warn!("failed to fetch qc data during HA rediscovery: {error}"),
+    }
+    match qcore.fetch_daily_schedule() {
+        Ok(schedule) => {
+            publisher.publish_schedule(&schedule)?;
+            stats.record_schedule_fetch();
+        }
+        Err(error) => warn!("failed to fetch schedule during HA rediscovery: {error}"),
+    }
+    Ok(())
 }
 
 fn handle_command(
@@ -167,6 +196,9 @@ fn handle_command(
         CommandMessage::ScheduleEnd { slot, value } => {
             config.ensure_slot(slot)?;
             config.schedules[slot - 1].end_time = value;
+        }
+        CommandMessage::HomeAssistantOnline => {
+            unreachable!("HomeAssistantOnline handled by caller")
         }
     }
 
